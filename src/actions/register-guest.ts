@@ -1,6 +1,6 @@
 'use server';
 
-import { createSupabaseServerClient } from 'src/lib/supabase';
+import { createSupabaseServerClient, createSupabaseAdminClient } from 'src/lib/supabase';
 
 export type CheckInInput = {
   propertyId: string;
@@ -58,16 +58,19 @@ export async function registerGuest(data: CheckInInput) {
       }
     }
 
-    // 5. Generate a unique guest registry identifier
+    // 5. Initialize secure Admin client to upload files and write to database bypassing RLS on server
+    const adminSupabase = createSupabaseAdminClient();
+
+    // 6. Generate a unique guest registry identifier
     const guestId = crypto.randomUUID();
 
-    // 6. Convert signature base64 asset to Buffer for upload
+    // 7. Convert signature base64 asset to Buffer for upload
     const signatureBuffer = Buffer.from(data.signatureBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
     const sigMime = data.signatureBase64.match(/data:(image\/\w+);base64/)?.[1] || 'image/png';
     const sigExt = sigMime.split('/')[1] || 'png';
     const signaturePath = `${data.propertyId}/${guestId}/signature.${sigExt}`;
 
-    // 7. Loop upload all guest ID documents
+    // 8. Loop upload all guest ID documents using Admin Client
     const idStoragePaths: string[] = [];
 
     for (let i = 0; i < data.idImagesBase64.length; i++) {
@@ -79,19 +82,19 @@ export async function registerGuest(data: CheckInInput) {
       const idExt = idMime.split('/')[1] || 'jpeg';
       const idStoragePath = `${data.propertyId}/${guestId}/id_document_${i}.${idExt}`;
 
-      const { error: idUploadError } = await supabase.storage
+      const { error: idUploadError } = await adminSupabase.storage
         .from('guest-identities')
         .upload(idStoragePath, idImageBuffer, {
           contentType: idMime,
-          cacheControl: '3600',
+          cacheControl: '3652',
           upsert: true
         });
 
       if (idUploadError) {
         console.error(`ID Image ${i} upload error:`, idUploadError);
-        // Roll back: Delete all uploaded ID images so far
+        // Roll back: Delete all uploaded ID images so far using admin client
         if (idStoragePaths.length > 0) {
-          await supabase.storage.from('guest-identities').remove(idStoragePaths);
+          await adminSupabase.storage.from('guest-identities').remove(idStoragePaths);
         }
         return { success: false, error: `Failed to upload ID photo for guest #${i + 1}: ${idUploadError.message}` };
       }
@@ -99,12 +102,12 @@ export async function registerGuest(data: CheckInInput) {
       idStoragePaths.push(idStoragePath);
     }
 
-    // 8. Upload Signature to Supabase Storage (Private Bucket)
-    const { error: sigUploadError } = await supabase.storage
+    // 9. Upload Signature to Supabase Storage using Admin Client
+    const { error: sigUploadError } = await adminSupabase.storage
       .from('guest-identities')
       .upload(signaturePath, signatureBuffer, {
         contentType: sigMime,
-        cacheControl: '3600',
+        cacheControl: '3652',
         upsert: true
       });
 
@@ -112,17 +115,17 @@ export async function registerGuest(data: CheckInInput) {
       console.error("Signature upload error:", sigUploadError);
       // Roll back: Delete all uploaded ID images
       if (idStoragePaths.length > 0) {
-        await supabase.storage.from('guest-identities').remove([...idStoragePaths, signaturePath]);
+        await adminSupabase.storage.from('guest-identities').remove([...idStoragePaths, signaturePath]);
       } else {
-        await supabase.storage.from('guest-identities').remove([signaturePath]);
+        await adminSupabase.storage.from('guest-identities').remove([signaturePath]);
       }
       return { success: false, error: `Failed to upload signature: ${sigUploadError.message}` };
     }
 
-    // 9. Log Check-In Record to PostgreSQL database
+    // 10. Log Check-In Record to PostgreSQL database using Admin Client
     const dbIdPath = JSON.stringify(idStoragePaths);
 
-    const { error: dbError } = await supabase
+    const { error: dbError } = await adminSupabase
       .from('guest_register')
       .insert({
         id: guestId,
@@ -147,7 +150,7 @@ export async function registerGuest(data: CheckInInput) {
     if (dbError) {
       console.error("Database log insert error:", dbError);
       // Roll back: Delete all uploaded guest documents and signature
-      await supabase.storage.from('guest-identities').remove([...idStoragePaths, signaturePath]);
+      await adminSupabase.storage.from('guest-identities').remove([...idStoragePaths, signaturePath]);
       return { success: false, error: `Database check-in logging failed: ${dbError.message}` };
     }
 
