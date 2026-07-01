@@ -40,17 +40,18 @@ interface DashboardProps {
   searchParams: Promise<{ propertyId?: string }>;
 }
 
-export const revalidate = 0; // Dynamic server component
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const MOCK_PROPERTIES: Property[] = [
-  { id: 'prop-pantai', name: 'Pantai Retreat Villa', location: 'Azhikode, Thrissur, Kerala' },
-  { id: 'prop-oceanpals', name: 'Ocean Pals', location: 'Azhikode, Thrissur, Kerala' }
+  { id: 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', name: 'Pantai Retreat Villa', location: 'Azhikode, Thrissur, Kerala' },
+  { id: 'f6e5d4c3-b2a1-0f9e-8d7c-6b5a4f3e2d1c', name: 'Ocean Pals', location: 'Azhikode, Thrissur, Kerala' }
 ];
 
 const MOCK_GUESTS: GuestRecord[] = [
   {
     id: 'guest-mock-1',
-    property_id: 'prop-pantai',
+    property_id: 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
     villa_type: 'Full Property',
     guest_name: 'Adithyan Nair',
     phone: '+91 94472 12345',
@@ -66,7 +67,7 @@ const MOCK_GUESTS: GuestRecord[] = [
   },
   {
     id: 'guest-mock-2',
-    property_id: 'prop-oceanpals',
+    property_id: 'f6e5d4c3-b2a1-0f9e-8d7c-6b5a4f3e2d1c',
     villa_type: 'Full Property',
     guest_name: 'Elena Rostova',
     phone: '+7 912 345-67-89',
